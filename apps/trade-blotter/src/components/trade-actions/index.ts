@@ -1,0 +1,1 @@
+export { default as TradeActionsManager } from './components/manager';

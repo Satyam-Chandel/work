@@ -1,0 +1,1 @@
+export const GET_GRID_QUERIES_URL = 'grid/query/getForScreen';
