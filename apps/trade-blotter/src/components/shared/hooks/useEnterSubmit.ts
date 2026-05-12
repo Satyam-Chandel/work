@@ -98,6 +98,73 @@ const getEventTarget = (event: KeyboardEvent): HTMLElement | null => {
   return event.target instanceof HTMLElement ? event.target : null;
 };
 
+/**
+ * When a dropdown/list is open or an option is highlighted, Enter must select the option — not submit the form.
+ * Also covers comboboxes that keep focus on the input while the list is portaled (aria-activedescendant).
+ */
+const shouldDeferEnterToNativeControl = (event: KeyboardEvent): boolean => {
+  if (event.target instanceof HTMLElement) {
+    const rawTarget = event.target;
+    if (rawTarget.tagName === 'TEXTAREA' || rawTarget.isContentEditable) {
+      return true;
+    }
+  }
+
+  const path = event.composedPath?.() ?? [];
+  for (const node of path) {
+    if (!(node instanceof HTMLElement)) {
+      continue;
+    }
+    const role = node.getAttribute('role')?.toLowerCase();
+    if (
+      role === 'option' ||
+      role === 'menuitem' ||
+      role === 'menuitemradio' ||
+      role === 'menuitemcheckbox'
+    ) {
+      return true;
+    }
+    if ((role === 'listbox' || role === 'menu') && isVisible(node)) {
+      return true;
+    }
+  }
+
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) {
+    if (active.tagName === 'TEXTAREA' || active.isContentEditable) {
+      return true;
+    }
+
+    const activeDescendantId = active.getAttribute('aria-activedescendant');
+    if (activeDescendantId) {
+      const highlighted = document.getElementById(activeDescendantId);
+      if (highlighted instanceof HTMLElement) {
+        const hr = highlighted.getAttribute('role')?.toLowerCase();
+        if (hr === 'option' || hr === 'menuitem' || hr === 'menuitemradio' || hr === 'menuitemcheckbox') {
+          return true;
+        }
+      }
+    }
+
+    if (active.getAttribute('aria-expanded') === 'true') {
+      const ar = active.getAttribute('role')?.toLowerCase();
+      if (ar === 'combobox') {
+        return true;
+      }
+      const hasPopup = active.getAttribute('aria-haspopup')?.toLowerCase();
+      if (hasPopup === 'listbox' || hasPopup === 'menu' || hasPopup === 'true') {
+        return true;
+      }
+    }
+
+    if (active.closest('[role="listbox"], [role="menu"]')) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const rankSubmitCandidate = (element: HTMLElement): number => {
   let score = 0;
 
@@ -248,6 +315,9 @@ export const useEnterSubmit = (options?: UseEnterSubmitOptions): void => {
         return;
       }
       if (isEventInsideEnterSubmitOptOut(event)) {
+        return;
+      }
+      if (shouldDeferEnterToNativeControl(event)) {
         return;
       }
       const target = getEventTarget(event);
